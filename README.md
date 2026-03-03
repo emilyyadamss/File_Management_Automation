@@ -1,24 +1,42 @@
-# File Management Automation (MVP)
+# File Management Automation (MVP+)
 
-A lightweight Python CLI to scan and organize files by extension with safe dry-run mode.
+A lightweight Python CLI to scan and organize files by extension or date with safe dry-run mode.
 
-## Features (MVP)
+## Features
 
 - Scan a directory and print file metadata as JSON
-- Organize files into category folders based on extension rules
+- Organize files by:
+  - extension rules (`--mode extension`)
+  - modified date buckets (`--mode date`, e.g. `2026-03`)
+- Recursive mode (`--recursive`)
 - Dry-run mode to preview changes before applying
 - Duplicate-safe moves (`file.txt` -> `file (1).txt`)
-- Undo manifest output (`fma-undo.json`) containing all performed moves
+- Undo manifest output (`fma-undo.json`) containing performed moves
+- Rollback command from undo manifest
 - Config-driven mode via JSON
+- Basic unit tests + GitHub Actions CI
 
 ## Quick Start
 
 From the repo root:
 
 ```bash
-python -m fma scan --source ./example
-python -m fma organize --source ./example --destination ./example/sorted --dry-run
-python -m fma organize --source ./example --destination ./example/sorted
+python3 -m fma scan --source ./example
+python3 -m fma organize --source ./example --destination ./example/sorted --dry-run
+python3 -m fma organize --source ./example --destination ./example/sorted
+```
+
+Recursive + date mode:
+
+```bash
+python3 -m fma organize --source ./example --destination ./example/sorted --recursive --mode date --dry-run
+```
+
+Apply and then rollback:
+
+```bash
+python3 -m fma organize --source ./example --destination ./example/sorted --undo-file ./fma-undo.json
+python3 -m fma rollback --undo-file ./fma-undo.json
 ```
 
 ## Config File
@@ -26,15 +44,15 @@ python -m fma organize --source ./example --destination ./example/sorted
 Create a starter config:
 
 ```bash
-python -m fma init-config --path fma-config.json
+python3 -m fma init-config --path fma-config.json
 ```
 
 Run using config:
 
 ```bash
-python -m fma scan --config fma-config.json
-python -m fma organize --config fma-config.json --dry-run
-python -m fma organize --config fma-config.json
+python3 -m fma scan --config fma-config.json --recursive
+python3 -m fma organize --config fma-config.json --mode extension --dry-run
+python3 -m fma organize --config fma-config.json --mode extension
 ```
 
 ## Default Buckets
@@ -49,9 +67,8 @@ Examples:
 - Code: `.py`, `.js`, `.ts`
 - Everything else goes to `other`
 
-## Next Steps
+## Tests
 
-- Add recursive scan option
-- Add date-based organization mode
-- Add unit tests + CI
-- Add rollback command from undo manifest
+```bash
+python3 -m unittest discover -s tests -v
+```
