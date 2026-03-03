@@ -74,6 +74,19 @@ Use a custom log file:
 python3 -m fma organize --source ./example --destination ./example/sorted --log-file ./logs/fma.log
 ```
 
+Quick preset for coding repositories (dry-run by default):
+
+```bash
+python3 -m fma quick-project --source ~/projects/Weather
+python3 -m fma quick-project --source ~/projects/Weather --apply
+```
+
+The `quick-project` preset automatically:
+- uses recursive scan
+- includes code files (`*.py`, `*.js`, `*.ts`, `*.tsx`, `*.jsx`)
+- excludes common build folders (`.git`, `node_modules`, `.next`, `dist`, `build`, `coverage`, virtual envs)
+- runs as copy mode with max-files cap
+
 ## Install as a CLI
 
 ```bash

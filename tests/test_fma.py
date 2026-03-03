@@ -112,5 +112,15 @@ class TestFMA(unittest.TestCase):
             self.assertTrue(planned[0].source.endswith(".py"))
 
 
+
+
+class TestQuickPresetDefaults(unittest.TestCase):
+    def test_quick_preset_excludes_build_dirs(self):
+        from fma.cli import DEFAULT_PROJECT_EXCLUDES
+
+        self.assertIn("*/.next/*", DEFAULT_PROJECT_EXCLUDES)
+        self.assertIn("*/node_modules/*", DEFAULT_PROJECT_EXCLUDES)
+
+
 if __name__ == "__main__":
     unittest.main()
