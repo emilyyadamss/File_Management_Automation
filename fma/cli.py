@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -24,8 +25,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
 
     if args.command == "rollback":
-        restored = rollback_from_undo(Path(args.undo_file).expanduser().resolve())
-        print(f"Rollback complete: restored {restored} files.")
+        restored = rollback_from_undo(Path(args.undo_file).expanduser().resolve(), dry_run=args.dry_run)
+        mode = "Dry-run rollback" if args.dry_run else "Rollback"
+        print(f"{mode} complete: {restored} files affected.")
+        _log(args.log_file, f"{mode}: {restored} files from {args.undo_file}")
         return 0
 
     config = _resolve_config(args)
@@ -33,6 +36,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.command == "scan":
         results = scan_directory(config.source_dir, recursive=args.recursive)
         print(json.dumps([asdict(x) for x in results], indent=2))
+        _log(args.log_file, f"Scan complete: {len(results)} files from {config.source_dir}")
         return 0
 
     if args.command == "organize":
@@ -49,7 +53,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         if args.dry_run:
             print(json.dumps([asdict(x) for x in planned], indent=2))
-            print(f"\nDry run complete: {len(planned)} files would be moved.")
+            action_word = "copied" if args.operation == "copy" else "moved"
+            print(f"\nDry run complete: {len(planned)} files would be {action_word}.")
+            _log(args.log_file, f"Dry-run organize ({args.operation}): {len(planned)} planned")
             return 0
 
         if args.max_files is None and len(planned) > 1000:
@@ -57,12 +63,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "Safety stop: planned moves exceed 1000 files. "
                 "Use --max-files to set a cap, or review with --dry-run first."
             )
+            _log(args.log_file, "Safety stop triggered: >1000 planned without --max-files")
             return 1
 
         undo_path = Path(args.undo_file).expanduser().resolve()
-        moved = apply_moves(planned, undo_file=undo_path)
-        print(f"Applied {moved} moves.")
+        moved = apply_moves(planned, undo_file=undo_path, operation=args.operation)
+        print(f"Applied {moved} {args.operation}(s).")
         print(f"Undo map written to: {undo_path}")
+        _log(args.log_file, f"Apply organize ({args.operation}): {moved} files, undo={undo_path}")
         return 0
 
     parser.print_help()
@@ -92,16 +100,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
     org_cmd = sub.add_parser("organize", help="Organize files")
     _add_common_flags(org_cmd)
-    org_cmd.add_argument("--dry-run", action="store_true", help="Preview changes without moving files")
+    org_cmd.add_argument("--dry-run", action="store_true", help="Preview changes without moving/copying files")
     org_cmd.add_argument("--undo-file", default="./fma-undo.json", help="Where to save move manifest")
     org_cmd.add_argument("--recursive", action="store_true", help="Organize files recursively")
     org_cmd.add_argument("--mode", choices=["extension", "date"], default="extension", help="Organization mode")
     org_cmd.add_argument("--include", action="append", default=[], help="Glob include filter (repeatable)")
     org_cmd.add_argument("--exclude", action="append", default=[], help="Glob exclude filter (repeatable)")
     org_cmd.add_argument("--max-files", type=int, help="Maximum files to process in this run")
+    org_cmd.add_argument("--operation", choices=["move", "copy"], default="move", help="Whether to move or copy files")
 
     rollback_cmd = sub.add_parser("rollback", help="Rollback moves from an undo manifest")
     rollback_cmd.add_argument("--undo-file", default="./fma-undo.json", help="Undo manifest path")
+    rollback_cmd.add_argument("--dry-run", action="store_true", help="Preview rollback actions only")
+    rollback_cmd.add_argument("--log-file", default="./fma.log", help="Path to append operation logs")
 
     return parser
 
@@ -110,3 +121,12 @@ def _add_common_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--config", help="Path to JSON config file")
     p.add_argument("--source", default=".", help="Source directory (ignored when --config used)")
     p.add_argument("--destination", help="Destination directory (ignored when --config used)")
+    p.add_argument("--log-file", default="./fma.log", help="Path to append operation logs")
+
+
+def _log(log_file: str, message: str) -> None:
+    path = Path(log_file).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(tz=timezone.utc).isoformat()
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(f"[{now}] {message}\n")

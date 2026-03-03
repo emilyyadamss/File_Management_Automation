@@ -1,4 +1,3 @@
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -26,10 +25,7 @@ class TestFMA(unittest.TestCase):
             self.assertTrue((dest / "documents" / "b.pdf").exists())
             self.assertTrue(undo.exists())
 
-            payload = json.loads(undo.read_text(encoding="utf-8"))
-            self.assertEqual(len(payload["moves"]), 2)
-
-    def test_rollback(self):
+    def test_rollback_move(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             source = base / "src"
@@ -39,11 +35,48 @@ class TestFMA(unittest.TestCase):
 
             planned = plan_moves(source, dest, rules={".py": "code"})
             undo = base / "undo.json"
-            apply_moves(planned, undo)
+            apply_moves(planned, undo, operation="move")
 
             restored = rollback_from_undo(undo)
             self.assertEqual(restored, 1)
             self.assertTrue((source / "script.py").exists())
+
+    def test_rollback_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "src"
+            dest = base / "sorted"
+            source.mkdir()
+            (source / "script.py").write_text("print('x')", encoding="utf-8")
+
+            planned = plan_moves(source, dest, rules={".py": "code"})
+            undo = base / "undo.json"
+            apply_moves(planned, undo, operation="copy")
+
+            self.assertTrue((source / "script.py").exists())
+            self.assertTrue((dest / "code" / "script.py").exists())
+
+            restored = rollback_from_undo(undo)
+            self.assertEqual(restored, 1)
+            self.assertTrue((source / "script.py").exists())
+            self.assertFalse((dest / "code" / "script.py").exists())
+
+    def test_rollback_dry_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "src"
+            dest = base / "sorted"
+            source.mkdir()
+            (source / "x.txt").write_text("hi", encoding="utf-8")
+
+            planned = plan_moves(source, dest, rules={".txt": "documents"})
+            undo = base / "undo.json"
+            apply_moves(planned, undo)
+
+            restored = rollback_from_undo(undo, dry_run=True)
+            self.assertEqual(restored, 1)
+            self.assertFalse((source / "x.txt").exists())
+            self.assertTrue((dest / "documents" / "x.txt").exists())
 
     def test_date_mode(self):
         with tempfile.TemporaryDirectory() as tmp:

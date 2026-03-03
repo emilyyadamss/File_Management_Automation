@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import shutil
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,7 +92,7 @@ def plan_moves(
     return planned
 
 
-def apply_moves(planned_moves: Iterable[PlannedMove], undo_file: Path) -> int:
+def apply_moves(planned_moves: Iterable[PlannedMove], undo_file: Path, operation: str = "move") -> int:
     performed: List[dict] = []
 
     for move in planned_moves:
@@ -102,8 +103,15 @@ def apply_moves(planned_moves: Iterable[PlannedMove], undo_file: Path) -> int:
             continue
 
         dst.parent.mkdir(parents=True, exist_ok=True)
-        src.rename(dst)
-        performed.append(asdict(move))
+
+        if operation == "copy":
+            shutil.copy2(src, dst)
+        else:
+            src.rename(dst)
+
+        payload = asdict(move)
+        payload["operation"] = operation
+        performed.append(payload)
 
     undo_file.parent.mkdir(parents=True, exist_ok=True)
     undo_file.write_text(
@@ -119,20 +127,29 @@ def apply_moves(planned_moves: Iterable[PlannedMove], undo_file: Path) -> int:
     return len(performed)
 
 
-def rollback_from_undo(undo_file: Path) -> int:
+def rollback_from_undo(undo_file: Path, dry_run: bool = False) -> int:
     payload = json.loads(undo_file.read_text(encoding="utf-8"))
     moves = payload.get("moves", [])
 
     restored = 0
     for move in reversed(moves):
+        operation = move.get("operation", "move")
         src = Path(move["destination"])
         dst = Path(move["source"])
+
+        if operation == "copy":
+            if src.exists():
+                if not dry_run:
+                    src.unlink()
+                restored += 1
+            continue
 
         if not src.exists():
             continue
 
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        src.rename(dst)
+        if not dry_run:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            src.rename(dst)
         restored += 1
 
     return restored
