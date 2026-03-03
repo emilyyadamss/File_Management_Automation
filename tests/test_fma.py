@@ -57,6 +57,27 @@ class TestFMA(unittest.TestCase):
             self.assertEqual(len(planned), 1)
             self.assertIn("modified date", planned[0].reason)
 
+    def test_include_exclude_and_max_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "src"
+            dest = base / "sorted"
+            source.mkdir()
+            (source / "keep.py").write_text("x", encoding="utf-8")
+            (source / "skip.log").write_text("x", encoding="utf-8")
+            (source / "keep2.py").write_text("x", encoding="utf-8")
+
+            planned = plan_moves(
+                source,
+                dest,
+                rules={".py": "code", ".log": "logs"},
+                include_patterns=["*.py", "*.log"],
+                exclude_patterns=["skip.*"],
+                max_files=1,
+            )
+            self.assertEqual(len(planned), 1)
+            self.assertTrue(planned[0].source.endswith(".py"))
+
 
 if __name__ == "__main__":
     unittest.main()

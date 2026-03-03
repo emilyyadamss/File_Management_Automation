@@ -42,12 +42,22 @@ def main(argv: Optional[list[str]] = None) -> int:
             config.rules,
             recursive=args.recursive,
             mode=args.mode,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+            max_files=args.max_files,
         )
 
         if args.dry_run:
             print(json.dumps([asdict(x) for x in planned], indent=2))
             print(f"\nDry run complete: {len(planned)} files would be moved.")
             return 0
+
+        if args.max_files is None and len(planned) > 1000:
+            print(
+                "Safety stop: planned moves exceed 1000 files. "
+                "Use --max-files to set a cap, or review with --dry-run first."
+            )
+            return 1
 
         undo_path = Path(args.undo_file).expanduser().resolve()
         moved = apply_moves(planned, undo_file=undo_path)
@@ -86,6 +96,9 @@ def _build_parser() -> argparse.ArgumentParser:
     org_cmd.add_argument("--undo-file", default="./fma-undo.json", help="Where to save move manifest")
     org_cmd.add_argument("--recursive", action="store_true", help="Organize files recursively")
     org_cmd.add_argument("--mode", choices=["extension", "date"], default="extension", help="Organization mode")
+    org_cmd.add_argument("--include", action="append", default=[], help="Glob include filter (repeatable)")
+    org_cmd.add_argument("--exclude", action="append", default=[], help="Glob exclude filter (repeatable)")
+    org_cmd.add_argument("--max-files", type=int, help="Maximum files to process in this run")
 
     rollback_cmd = sub.add_parser("rollback", help="Rollback moves from an undo manifest")
     rollback_cmd.add_argument("--undo-file", default="./fma-undo.json", help="Undo manifest path")

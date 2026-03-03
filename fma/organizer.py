@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Sequence
 
 
 @dataclass
@@ -47,15 +48,27 @@ def plan_moves(
     rules: Dict[str, str],
     recursive: bool = False,
     mode: str = "extension",
+    include_patterns: Sequence[str] | None = None,
+    exclude_patterns: Sequence[str] | None = None,
+    max_files: int | None = None,
 ) -> List[PlannedMove]:
     planned: List[PlannedMove] = []
     files = source_dir.rglob("*") if recursive else source_dir.iterdir()
+
+    include_patterns = include_patterns or []
+    exclude_patterns = exclude_patterns or []
 
     for item in files:
         if not item.is_file():
             continue
 
         if destination_dir in item.parents:
+            continue
+
+        rel = str(item.relative_to(source_dir))
+        if include_patterns and not _matches_any(rel, include_patterns):
+            continue
+        if exclude_patterns and _matches_any(rel, exclude_patterns):
             continue
 
         ext = item.suffix.lower()
@@ -71,6 +84,9 @@ def plan_moves(
         destination_folder = destination_dir / bucket
         target = _dedupe_target(destination_folder / item.name)
         planned.append(PlannedMove(source=str(item), destination=str(target), reason=reason))
+
+        if max_files is not None and len(planned) >= max_files:
+            break
 
     return planned
 
@@ -109,8 +125,8 @@ def rollback_from_undo(undo_file: Path) -> int:
 
     restored = 0
     for move in reversed(moves):
-        src = Path(move["destination"])  # current location
-        dst = Path(move["source"])  # original location
+        src = Path(move["destination"])
+        dst = Path(move["source"])
 
         if not src.exists():
             continue
@@ -120,6 +136,10 @@ def rollback_from_undo(undo_file: Path) -> int:
         restored += 1
 
     return restored
+
+
+def _matches_any(path: str, patterns: Sequence[str]) -> bool:
+    return any(fnmatch.fnmatch(path, p) for p in patterns)
 
 
 def _dedupe_target(target: Path) -> Path:
